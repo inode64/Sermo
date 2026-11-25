@@ -43,6 +43,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			continue
 		}
 		validateCheckSummary(checkPath, check, add)
+		validateWatchSkipWhenIdle(checkPath, check, add)
 		// A watch's check block never reaches validateCheckSection, so its
 		// severity is validated here — before the per-type switch, so net, icmp,
 		// swap, file and process are covered too.
@@ -206,6 +207,7 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 		return
 	}
 	validateCheckSummary(checkPath, check, add)
+	validateWatchSkipWhenIdle(checkPath, check, add)
 	validateSeverityField(checkPath, check, add)
 	typ := cfgval.String(check[checks.CheckKeyType])
 	if typ == "" {

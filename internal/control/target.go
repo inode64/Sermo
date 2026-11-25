@@ -39,7 +39,7 @@ func Resolve(ctx context.Context, name string, tree map[string]any, backend serv
 		return Target{}, err
 	}
 	if controlled {
-		return resolveControlledTarget(ctx, typ, tree, resolver.Runner)
+		return resolveControlledTarget(ctx, typ, tree, backend, resolver.Runner)
 	}
 	candidates, trust := config.ServiceCandidates(tree, string(backend), name)
 	unit, err := resolver.Resolve(ctx, backend, candidates, trust)
@@ -62,7 +62,9 @@ func applyDependencyOptions(target *Target, tree map[string]any) {
 	target.Manager = servicemgr.WithOptions(target.Manager, servicemgr.Options{AllowDependencies: true})
 }
 
-func resolveControlledTarget(ctx context.Context, typ string, tree map[string]any, runner execx.Runner) (Target, error) {
+// resolveControlledTarget builds the target a control block names. backend is
+// the host's init system, which still owns any unit a control refers to.
+func resolveControlledTarget(ctx context.Context, typ string, tree map[string]any, backend servicemgr.Backend, runner execx.Runner) (Target, error) {
 	switch typ {
 	case virt.ControlType:
 		spec, _, err := virt.SpecFromTree(tree)
@@ -79,10 +81,12 @@ func resolveControlledTarget(ctx context.Context, typ string, tree map[string]an
 		if err != nil {
 			return Target{}, fmt.Errorf("resolve libvirt network control: %w", err)
 		}
+		manager := virt.NewNetworkManager(spec)
+		manager.UnitIdle = servicemgr.HostUnitIdle(runner, backend)
 		return Target{
 			Unit:    spec.Network,
 			Backend: servicemgr.BackendLibvirtNetwork,
-			Manager: virt.NewNetworkManager(spec),
+			Manager: manager,
 		}, nil
 	case dockerctl.ControlType:
 		spec, _, err := dockerctl.SpecFromTree(tree)

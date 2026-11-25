@@ -107,7 +107,7 @@ type Result struct {
 	// holding under a PASSED verdict is an advisory); a declaration always wins.
 	Severity severity.Level `json:"-"`
 	Optional bool           `json:"optional,omitempty"`
-	Skipped  bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
+	Skipped  bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed/skip_when_idle)
 	// Unavailable marks a failed observation that a guard must treat as unsafe
 	// rather than as a false condition.
 	Unavailable bool `json:"-"`

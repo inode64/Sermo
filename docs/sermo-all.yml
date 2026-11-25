@@ -885,9 +885,9 @@ config:
 # watch entries are reported as "demo:<name>" and
 # pausable via `sermoctl watch unmonitor`.
 watches:
-  # Check-level common fields: enabled, optional, interval, timeout, requires and
-  # skip_when_changed. Disable inherited entries with enabled:false; delete:true
-  # removes an inherited map entry during merge.
+  # Check-level common fields: enabled, optional, interval, timeout, requires,
+  # skip_when_changed and skip_when_idle. Disable inherited entries with
+  # enabled:false; delete:true removes an inherited map entry during merge.
   service:
     check: { type: service, expect: active }
   tcp:

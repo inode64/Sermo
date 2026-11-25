@@ -18,7 +18,10 @@ service health or availability. `smartd` is the reference: its catalog checks
 are `service`, `process` and memory, while drive health lives in host `smart`
 watches (`examples/watches/smart.yml`).
 
-Flag one health watch `verify: true` for start verification. Guards are
+Flag one health watch `verify: true` for start verification. A probe that
+connects to a socket systemd activates (the libvirt daemons' `libvirt` checks)
+sets `skip_when_idle` to the daemon's unit; without it the probe starts the
+daemon on every cycle, boot included. Guards are
 top-level `rules:` of `type: guard`; remediation and alerts attach through
 `watches.<name>.then`.
 

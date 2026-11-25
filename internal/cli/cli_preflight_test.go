@@ -12,6 +12,8 @@ import (
 
 	appcore "sermo/internal/app"
 	"sermo/internal/checks"
+	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/operation"
 	"sermo/internal/servicemgr"
 	"sermo/internal/severity"
@@ -123,6 +125,60 @@ service: web
 	}
 	if got := stdout.String(); !strings.Contains(got, "OK   load: sampled") {
 		t.Fatalf("stdout = %q, want prepared engine result", got)
+	}
+}
+
+// sermoctl builds a controlled service's runtime through app.WithControlTarget,
+// so its skip_when_idle checks are still judged on the host's init system even
+// though Backend names the libvirt network control.
+func TestPreflightJudgesSkipWhenIdleOnTheHostInitForAControlledService(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "virtnetworkd-sock")
+	global := writeServiceConfig(t, servicesDirGlobal, map[string]string{
+		"services/libvirt-net-default.yml": `
+name: libvirt-net-default
+control:
+  type: libvirt-network
+  network: default
+  socket: ` + socket + `
+  skip_when_idle: virtnetworkd
+`,
+	})
+	runner := &execxtest.Runner{ByLine: map[string]execx.Result{
+		"systemctl is-active -- virtnetworkd.service":                   {Stdout: "inactive\n", ExitCode: 3},
+		"systemctl show -p TriggeredBy --value -- virtnetworkd.service": {Stdout: "virtnetworkd.socket\n"},
+		"systemctl is-active -- virtnetworkd.socket":                    {Stdout: "active\n"},
+	}}
+	var deps appcore.Deps
+	var stdout bytes.Buffer
+	cliApp := hermeticApp(t, App{
+		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
+		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+			return fakeManager{}, nil
+		},
+		Runner: runner,
+		buildServiceRuntime: func(_ context.Context, cfg appcore.ServiceRuntimeConfig) appcore.ServiceRuntime {
+			deps = cfg.Deps
+			return appcore.ServiceRuntime{
+				Engine: operation.Engine{Preflight: func(context.Context) checks.Outcome {
+					return checks.Outcome{OK: true}
+				}},
+				CheckDeps: checks.Deps{DefaultTimeout: time.Second},
+			}
+		},
+		Env:        func(string) string { return "" },
+		LoadConfig: testConfigLoader(t),
+		Stdout:     &stdout,
+		Stderr:     &bytes.Buffer{},
+	})
+
+	if code := cliApp.Run(t.Context(), []string{"--config", global, "preflight", "libvirt-net-default"}); code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d; stdout=%s", code, exitSuccess, stdout.String())
+	}
+	if deps.Backend != servicemgr.BackendLibvirtNetwork {
+		t.Fatalf("runtime Backend = %q, want the control target's", deps.Backend)
+	}
+	if deps.UnitIdle == nil || !deps.UnitIdle(t.Context(), "virtnetworkd") {
+		t.Fatalf("skip_when_idle cannot see the idle daemon on the host's systemd (calls %v)", runner.Calls())
 	}
 }
 

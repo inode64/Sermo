@@ -42,8 +42,10 @@ Piensa en MariaDB durante una copia de seguridad. Si el perfil del catálogo det
   binario o una librería compartida que una actualización reemplazó en disco, y
   `restart_on_change` para reiniciar un servicio cuando cambia una de sus apps o
   de sus ficheros de configuración.
-- **Interdependencias entre checks** (`requires` / `skip_when_changed`) para que
-  un probe solo se ejecute cuando se cumplen sus prerrequisitos.
+- **Interdependencias entre checks** (`requires` / `skip_when_changed` /
+  `skip_when_idle`) para que un probe solo se ejecute cuando se cumplen sus
+  prerrequisitos y, con `skip_when_idle`, no despierte a un demonio activado por
+  socket que espera a su socket.
 - **Host watches** — vigilan recursos que no son servicios (montajes, arrays
   RAID, uplinks de red, certificados, …), disparando comandos de hook y/o
   notificaciones, y reparando el almacenamiento cuando se pide (`then.expand`

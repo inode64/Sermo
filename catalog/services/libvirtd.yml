@@ -37,6 +37,8 @@ watches:
   restart-if-libvirt-failed:
     check:
       type: libvirt
+      # A socket-activated libvirtd stays asleep until a client needs it.
+      skip_when_idle: libvirtd
       timeout: 5s
       verify: true
     for:

@@ -1274,6 +1274,7 @@ func watchInlineDeps(deps Deps) checks.Deps {
 		Limiter:           deps.CheckLimiter,
 		DefaultTimeout:    deps.DefaultTimeout,
 		Runner:            deps.ExecxRunner,
+		UnitIdle:          hostUnitIdle(deps),
 		Samplers:          deps.Samplers,
 	}
 	return checkDeps

@@ -182,6 +182,28 @@ func TestValidateProcessPolicyWatch(t *testing.T) {
 	}
 }
 
+// skip_when_idle only works where a watch runs one built probe; the watches with
+// their own state machines would ignore it, so validation refuses it there.
+func TestValidateHostWatchSkipWhenIdle(t *testing.T) {
+	assertNoWatchIssues(t, watchConfig("libvirt", map[string]any{
+		"type": "libvirt", "socket": "/run/libvirt/virtnetworkd-sock", "skip_when_idle": "virtnetworkd",
+	}))
+	for typ, check := range map[string]map[string]any{
+		"file":              {"type": "file", "path": "/etc/hosts", "on": map[string]any{"modified": true}},
+		"process":           {"type": "process", "exe": "/usr/bin/sleep"},
+		"unowned_processes": {"type": "unowned_processes"},
+	} {
+		check["skip_when_idle"] = "virtnetworkd"
+		found := false
+		for _, issue := range watchIssues(validateRawGlobal(t, watchConfig("w", check))) {
+			found = found || strings.Contains(issue.Msg, "skip_when_idle is not supported on a "+typ+" watch")
+		}
+		if !found {
+			t.Errorf("%s watch with skip_when_idle: want a not-supported issue", typ)
+		}
+	}
+}
+
 func TestValidateUnownedProcessesWatch(t *testing.T) {
 	assertNoWatchIssues(t, map[string]any{
 		"notifiers": map[string]any{"ops": map[string]any{"type": "wall"}},

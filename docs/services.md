@@ -948,11 +948,51 @@ dials `guard_socket`/`guard_uri` (defaults: the network socket and
 `qemu:///system`). `host`/`port` select a TCP endpoint exactly like
 `control: libvirt`, shared by both sessions.
 
+`control.skip_when_idle` names the local systemd service behind `socket`
+(`virtnetworkd`, or `libvirtd` on a monolithic host). While that daemon is
+stopped and waits for its socket, Sermo reads the network without dialing:
+operations see it inactive and monitoring reads it `idle`, which `expect:
+active` accepts, so nothing alerts or starts it. libvirt does not let the daemon
+time out while a network is active, but a `systemctl stop` of the daemon leaves
+its networks and dnsmasq running: until the daemon starts again, such a network
+also reads inactive (`idle`). That lets the daemon stay
+socket-activated: it starts when a client needs it, typically when the first
+guest starts, and starts its autostart networks then. The unit's `[Install]`
+lists its three sockets under `Also=`, so disabling the service disables them
+too; enable them again, or nothing listens after the next boot:
+
+```sh
+systemctl disable virtnetworkd.service
+systemctl enable virtnetworkd.socket virtnetworkd-ro.socket virtnetworkd-admin.socket
+``` Without the key, every status
+read dials the socket and starts the daemon at Sermo's first cycle. A
+`start`, `stop` or `restart` still dials, and so starts the daemon. The key
+cannot be combined with `host`: only a local unit's state can be read.
+
+```yaml
+control:
+  type: libvirt-network
+  network: default
+  socket: /run/libvirt/virtnetworkd-sock
+  guard_socket: /run/libvirt/virtqemud-sock
+  skip_when_idle: virtnetworkd
+```
+
+Why socket activation matters for a NAT network: with firewalld 2.5 and later
+its unit no longer waits for D-Bus, and libvirt sets the bridge's firewalld zone
+only if firewalld is already registered on the bus when the network starts.
+A `virtnetworkd.service` started at boot can win that race and leave the bridge
+in the default zone, which blocks the guests' DHCP, DNS and forwarding. The
+check-level form, `skip_when_idle` on a probe of the daemon's own socket, is in
+[rules](rules.md#check-interdependencies-requires--skip_when_changed--skip_when_idle).
+
 The safe operation engine is unchanged: locks, guards, preflight, operation
 timeouts and remediation policy still apply. The primitive actions are libvirt
 network operations:
 
-- `start` starts the defined network (`NetworkCreate`).
+- `start` starts the defined network (`NetworkCreate`); a network already
+  active, such as one the daemon autostarted when the start woke it, is left
+  as it is.
 - `stop` destroys the network (`NetworkDestroy`) — but **hard-refuses while any
   live guest has an interface on the network** (matched by source network name
   or by the network's bridge, and counting paused and crashed guests: their
@@ -966,7 +1006,8 @@ network operations:
 - `reload`, `pause` and `resume` are unsupported for virtual networks.
 
 Network state maps active → `active` and inactive → `stopped`/`failed`
-following the usual monitoring semantics.
+following the usual monitoring semantics, or `idle` while the daemon named by
+`skip_when_idle` waits for its socket.
 
 Why manage networks at all: libvirt spawns one dnsmasq pair per NAT network,
 and that pair deliberately survives daemon restarts (the packaged

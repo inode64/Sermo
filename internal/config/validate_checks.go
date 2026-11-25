@@ -107,7 +107,8 @@ func validateOomFields(prefix string, fields map[string]any, add addFunc) {
 
 // validateCheckGate validates a check's interdependency fields: `requires` is a
 // list of other check names in the same section (a check may not require itself or
-// an unknown check), and `skip_when_changed` is a list of file paths.
+// an unknown check), `skip_when_changed` is a list of file paths and
+// `skip_when_idle` a list of systemd services.
 func validateCheckGate(path, name string, entry, section map[string]any, add addFunc) {
 	if v, present := entry[keyRequires]; present {
 		reqs, ok := gateStrings(v)
@@ -125,6 +126,45 @@ func validateCheckGate(path, name string, entry, section map[string]any, add add
 	if v, present := entry[checks.CheckKeySkipWhenChanged]; present {
 		if _, ok := gateStrings(v); !ok {
 			add("%s.skip_when_changed must be a file path or a list of file paths", path)
+		}
+	}
+	validateSkipWhenIdle(path, entry, add)
+}
+
+// validateWatchSkipWhenIdle validates `skip_when_idle` on a watch's check. File,
+// process-scan, process policy, unowned-process and db_queries watches run their
+// own state machines (internal/app/watch_build.go), not one built probe, so the
+// key could not take effect there and is refused rather than ignored.
+func validateWatchSkipWhenIdle(path string, check map[string]any, add addFunc) {
+	if _, present := check[checks.CheckKeySkipWhenIdle]; !present {
+		return
+	}
+	switch typ := cfgval.String(check[checks.CheckKeyType]); {
+	case typ == checks.CheckTypeFile, typ == checks.CheckTypeProcessPolicy,
+		typ == checks.CheckTypeUnownedProcesses, typ == checks.CheckTypeDBQueries,
+		typ == checks.CheckTypeProcess && !checks.ProcessStateWatch(check):
+		add("%s.%s is not supported on a %s watch, which does not run a single probe", path, checks.CheckKeySkipWhenIdle, typ)
+		return
+	}
+	validateSkipWhenIdle(path, check, add)
+}
+
+// validateSkipWhenIdle validates a check's `skip_when_idle`: the systemd services
+// whose wait for their socket, timer or path unit leaves the probe unrun. Unlike
+// `requires`, it also applies to a watch's check, so watches call it directly.
+func validateSkipWhenIdle(path string, entry map[string]any, add addFunc) {
+	v, present := entry[checks.CheckKeySkipWhenIdle]
+	if !present {
+		return
+	}
+	units, ok := gateStrings(v)
+	if !ok || len(units) == 0 {
+		add("%s.%s must be a systemd service name or a list of them", path, checks.CheckKeySkipWhenIdle)
+		return
+	}
+	for _, unit := range units {
+		if !servicemgr.ValidIdleUnit(unit) {
+			add("%s.%s unit %q must be one systemd service name; its socket, timer or path unit is the trigger, not the idle service", path, checks.CheckKeySkipWhenIdle, unit)
 		}
 	}
 }

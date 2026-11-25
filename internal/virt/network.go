@@ -23,10 +23,13 @@ const NetworkControlType = "libvirt-network"
 // ControlKeyGuardSocket/ControlKeyGuardURI select the domain-API connection
 // the guest-attachment guard uses: on modular libvirt the network daemon's
 // own socket serves no domain calls, so the guard dials the qemu daemon.
+// ControlKeySkipWhenIdle names the socket-activated network daemon whose idle
+// state stops Sermo from dialing it just to read the network.
 const (
-	ControlKeyNetwork     = "network"
-	ControlKeyGuardSocket = "guard_socket"
-	ControlKeyGuardURI    = "guard_uri"
+	ControlKeyNetwork      = "network"
+	ControlKeyGuardSocket  = "guard_socket"
+	ControlKeyGuardURI     = "guard_uri"
+	ControlKeySkipWhenIdle = servicemgr.KeySkipWhenIdle
 )
 
 const controlPathNetwork = sectionControl + "." + ControlKeyNetwork
@@ -52,6 +55,8 @@ type NetworkSpec struct {
 	GuardURI    string
 	Host        string
 	Port        int
+	// SkipWhenIdle is the local systemd service behind Socket; empty dials always.
+	SkipWhenIdle string
 }
 
 // NetworkSpecFromTree reads a service's optional
@@ -77,6 +82,16 @@ func NetworkSpecFromTree(tree map[string]any) (NetworkSpec, bool, error) {
 	}
 	if err := validateEndpointFields(spec.URI, spec.Socket, spec.Host); err != nil {
 		return NetworkSpec{}, true, err
+	}
+	if raw, present := m[ControlKeySkipWhenIdle]; present {
+		spec.SkipWhenIdle = cfgval.String(raw)
+		if !servicemgr.ValidIdleUnit(spec.SkipWhenIdle) {
+			return NetworkSpec{}, true, fmt.Errorf("%s.%s %q must be one systemd service name", sectionControl, ControlKeySkipWhenIdle, spec.SkipWhenIdle)
+		}
+		// Only a local unit's state can be read, and only it owns the local socket.
+		if spec.Host != "" {
+			return NetworkSpec{}, true, fmt.Errorf("%s.%s names a local unit and cannot be combined with %s", sectionControl, ControlKeySkipWhenIdle, ControlKeyHost)
+		}
 	}
 	if !validSocketPath(spec.GuardSocket) {
 		return NetworkSpec{}, true, fmt.Errorf("%s.%s %q must be an absolute path", sectionControl, ControlKeyGuardSocket, spec.GuardSocket)
@@ -138,17 +153,34 @@ type NetworkManager struct {
 	// NewClient injects the session factory for tests; socket names the
 	// endpoint being dialed (network daemon or the guard's domain daemon).
 	NewClient func(spec NetworkSpec, socket string, timeout time.Duration) (NetworkClient, error)
+	// UnitIdle answers Spec.SkipWhenIdle on the host's init system; nil dials always.
+	UnitIdle servicemgr.UnitIdleFunc
 }
 
-var _ servicemgr.Manager = NetworkManager{}
+var (
+	_ servicemgr.Manager      = NetworkManager{}
+	_ servicemgr.IdleReporter = NetworkManager{}
+)
 
 // NewNetworkManager returns a libvirt NetworkManager for spec.
 func NewNetworkManager(spec NetworkSpec) NetworkManager {
 	return NetworkManager{Spec: spec}
 }
 
-// Status returns the normalized state of the managed network.
+// WaitsForTrigger reports whether the network daemon named by skip_when_idle is
+// stopped and waiting for its socket. Dialing that socket would start it, and
+// it starts its autostart networks itself when something does need it.
+func (m NetworkManager) WaitsForTrigger(ctx context.Context) bool {
+	return m.Spec.SkipWhenIdle != "" && m.UnitIdle != nil && m.UnitIdle(ctx, m.Spec.SkipWhenIdle)
+}
+
+// Status returns the normalized state of the managed network. While its daemon
+// waits for its socket the network reads inactive without a connection: no
+// daemon is running to keep it up, and operations still dial to act on it.
 func (m NetworkManager) Status(ctx context.Context, service string) (servicemgr.ServiceStatus, error) {
+	if m.WaitsForTrigger(ctx) {
+		return m.serviceStatus(service, servicemgr.StatusInactive), nil
+	}
 	status, err := runWithSession(ctx, m.Spec.URI, m.sessionClient(m.Spec.Socket), func(c NetworkClient) (servicemgr.Status, error) {
 		net, err := lookupNetwork(c, m.Spec.Network)
 		if err != nil {
@@ -166,17 +198,26 @@ func (m NetworkManager) Status(ctx context.Context, service string) (servicemgr.
 	if err != nil {
 		return servicemgr.ServiceStatus{}, err
 	}
+	return m.serviceStatus(service, status), nil
+}
+
+func (m NetworkManager) serviceStatus(service string, status servicemgr.Status) servicemgr.ServiceStatus {
 	return servicemgr.ServiceStatus{
 		Service: service,
 		Backend: servicemgr.BackendLibvirtNetwork,
 		Unit:    m.Spec.Network,
 		Status:  status,
-	}, nil
+	}
 }
 
-// Start starts a defined, inactive libvirt network.
+// Start starts a defined, inactive libvirt network. One already active is left
+// alone: a socket-activated daemon starts its autostart networks the moment this
+// session's dial wakes it, after Status read the network inactive without one.
 func (m NetworkManager) Start(ctx context.Context, _ string) error {
 	return m.networkAction(ctx, networkActionStart, func(c NetworkClient, net libvirt.Network) error {
+		if active, err := c.NetworkIsActive(net); err == nil && active != 0 {
+			return nil
+		}
 		return c.NetworkCreate(net)
 	})
 }

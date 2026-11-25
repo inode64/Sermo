@@ -38,6 +38,9 @@ watches:
     check:
       type: libvirt
       socket: /run/libvirt/virtnetworkd-sock
+      # Dialing the socket starts a daemon that waits for it, and libvirt
+      # then autostarts its networks at that moment, boot included.
+      skip_when_idle: virtnetworkd
       timeout: 5s
       verify: true
     for:

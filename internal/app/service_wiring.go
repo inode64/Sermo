@@ -125,6 +125,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 			}
 			return st.Status, nil
 		},
+		UnitIdle:          hostUnitIdle(deps),
 		ProcessesAny:      discoverer.ObserveAnyState,
 		ProcessesReplaced: discoverer.ReplacedAny,
 		// Service scope, not host scope: a process_count check inside a service

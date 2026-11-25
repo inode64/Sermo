@@ -280,7 +280,9 @@ policy: { cooldown: 5m }
 checks:
   tcp:   { type: tcp, host: 127.0.0.1, port: 3306 }
   query: { type: command, command: ["/bin/true"], requires: [tcp], skip_when_changed: ["/etc/my.cnf"] }
-`, "checks.query", `
+  asleep: { type: command, command: ["/bin/true"], skip_when_idle: [virtnetworkd, virtqemud.service] }
+  one:   { type: command, command: ["/bin/true"], skip_when_idle: virtnetworkd }
+`, "checks.", `
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -291,12 +293,36 @@ checks:
   badsk: { type: tcp, host: 127.0.0.1, port: 80, skip_when_changed: 5 }
   badreqlist: { type: tcp, host: 127.0.0.1, port: 80, requires: [123] }
   badsklist: { type: tcp, host: 127.0.0.1, port: 80, skip_when_changed: [123] }
+  badidle: { type: tcp, host: 127.0.0.1, port: 80, skip_when_idle: 5 }
+  emptyidle: { type: tcp, host: 127.0.0.1, port: 80, skip_when_idle: [] }
+  socketidle: { type: tcp, host: 127.0.0.1, port: 80, skip_when_idle: [virtnetworkd.socket] }
 `,
 		"checks.self.requires cannot reference itself",
 		`checks.ghost.requires references unknown check "missing"`,
 		"checks.badsk.skip_when_changed must be a file path or a list",
 		"checks.badreqlist.requires must be a check name or a list of check names",
-		"checks.badsklist.skip_when_changed must be a file path or a list")
+		"checks.badsklist.skip_when_changed must be a file path or a list",
+		"checks.badidle.skip_when_idle must be a systemd service name or a list of them",
+		"checks.emptyidle.skip_when_idle must be a systemd service name or a list of them",
+		`checks.socketidle.skip_when_idle unit "virtnetworkd.socket" must be one systemd service name`)
+}
+
+func TestValidateSkipWhenIdleOnWatchChecks(t *testing.T) {
+	assertServiceValidation(t, `
+name: svc
+service: x
+policy: { cooldown: 5m }
+watches:
+  libvirt:
+    check: { type: command, command: ["/bin/true"], skip_when_idle: virtnetworkd }
+`, "skip_when_idle", `
+name: svc
+service: x
+policy: { cooldown: 5m }
+watches:
+  libvirt:
+    check: { type: command, command: ["/bin/true"], skip_when_idle: "two units" }
+`, `skip_when_idle unit "two units" must be one systemd service name`)
 }
 
 // assertCheckRequiresPath asserts that a check of the given type reports

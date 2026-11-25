@@ -128,6 +128,80 @@ func TestNetworkManagerStatus(t *testing.T) {
 	}
 }
 
+func TestNetworkManagerStatusLeavesAnIdleDaemonAsleep(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		unit      string
+		idle      bool
+		withIdle  bool
+		want      servicemgr.Status
+		wantDial  bool
+		wantAsked []string
+	}{
+		{name: "idle daemon", unit: "virtnetworkd", idle: true, withIdle: true, want: servicemgr.StatusInactive, wantAsked: []string{"virtnetworkd"}},
+		{name: "running daemon", unit: "virtnetworkd", withIdle: true, want: servicemgr.StatusActive, wantDial: true, wantAsked: []string{"virtnetworkd"}},
+		{name: "no unit named", idle: true, withIdle: true, want: servicemgr.StatusActive, wantDial: true},
+		{name: "no unit state", unit: "virtnetworkd", idle: true, want: servicemgr.StatusActive, wantDial: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &fakeNetworkClient{active: 1, netXML: testNetXML}
+			m := networkManagerWith(client)
+			m.Spec.SkipWhenIdle = tc.unit
+			var asked []string
+			if tc.withIdle {
+				m.UnitIdle = func(_ context.Context, unit string) bool {
+					asked = append(asked, unit)
+					return tc.idle
+				}
+			}
+			status, err := m.Status(t.Context(), "libvirt-net-default")
+			if err != nil {
+				t.Fatalf("Status() error = %v", err)
+			}
+			if status.Status != tc.want || status.Unit != "default" || status.Backend != servicemgr.BackendLibvirtNetwork {
+				t.Fatalf("Status() = %+v, want %s for network default", status, tc.want)
+			}
+			if dialed := len(client.sockets) > 0; dialed != tc.wantDial {
+				t.Fatalf("dialed %v, want dial = %v", client.sockets, tc.wantDial)
+			}
+			if !slices.Equal(asked, tc.wantAsked) {
+				t.Fatalf("asked units %v, want %v", asked, tc.wantAsked)
+			}
+			if got := m.WaitsForTrigger(t.Context()); got != (tc.want == servicemgr.StatusInactive) {
+				t.Fatalf("WaitsForTrigger() = %v, want %v", got, !got)
+			}
+		})
+	}
+}
+
+func TestNetworkManagerStartDialsAnIdleDaemon(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		active     int32
+		wantCreate bool
+	}{
+		{name: "network still down", wantCreate: true},
+		// Waking the daemon started its autostart network before this call.
+		{name: "network autostarted by the woken daemon", active: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &fakeNetworkClient{active: tc.active, netXML: testNetXML}
+			m := networkManagerWith(client)
+			m.Spec.SkipWhenIdle = "virtnetworkd"
+			m.UnitIdle = func(context.Context, string) bool { return true }
+			if err := m.Start(t.Context(), "libvirt-net-default"); err != nil {
+				t.Fatalf("Start() error = %v", err)
+			}
+			if len(client.sockets) == 0 {
+				t.Fatal("an explicit start must reach the daemon")
+			}
+			if created := slicesContains(client.calls, "net-create"); created != tc.wantCreate {
+				t.Fatalf("calls = %v, want net-create = %v", client.calls, tc.wantCreate)
+			}
+		})
+	}
+}
+
 func TestNetworkManagerStartCreates(t *testing.T) {
 	client := &fakeNetworkClient{netXML: testNetXML}
 	if err := networkManagerWith(client).Start(context.Background(), "libvirt-net-default"); err != nil {
@@ -287,6 +361,10 @@ func TestNetworkSpecFromTree(t *testing.T) {
 	if _, _, err := NetworkSpecFromTree(map[string]any{"control": map[string]any{"type": NetworkControlType}}); err == nil {
 		t.Fatal("NetworkSpecFromTree() without network = nil error, want required-network error")
 	}
+	tree["control"].(map[string]any)[ControlKeySkipWhenIdle] = "virtnetworkd"
+	if spec, _, err := NetworkSpecFromTree(tree); err != nil || spec.SkipWhenIdle != "virtnetworkd" {
+		t.Fatalf("NetworkSpecFromTree() skip_when_idle = %q, %v; want virtnetworkd", spec.SkipWhenIdle, err)
+	}
 }
 
 func TestNetworkSpecFromTreeRejectsInvalidEndpoint(t *testing.T) {
@@ -297,6 +375,9 @@ func TestNetworkSpecFromTreeRejectsInvalidEndpoint(t *testing.T) {
 		{ControlKeyNetwork: "default", ControlKeyHost: "   "},
 		{ControlKeyNetwork: "default", ControlKeySocket: DefaultSocket, ControlKeyHost: "127.0.0.1"},
 		{ControlKeyNetwork: "default", ControlKeyPort: 70000},
+		{ControlKeyNetwork: "default", ControlKeySkipWhenIdle: ""},
+		{ControlKeyNetwork: "default", ControlKeySkipWhenIdle: "virtnetworkd.socket"},
+		{ControlKeyNetwork: "default", ControlKeySkipWhenIdle: "virtnetworkd", ControlKeyHost: "10.0.0.1"},
 	} {
 		fields[ControlKeyType] = NetworkControlType
 		if _, controlled, err := NetworkSpecFromTree(map[string]any{sectionControl: fields}); !controlled || err == nil {

@@ -3,6 +3,7 @@ package checks
 import (
 	"sermo/internal/conn"
 	"sermo/internal/netutil"
+	"sermo/internal/servicemgr"
 )
 
 // Check-entry YAML keys shared by builders, validators and web readers. These
@@ -157,6 +158,7 @@ const (
 	CheckKeySerialNumber          = "serial_number"
 	CheckKeySeverity              = "severity"
 	CheckKeySkipWhenChanged       = "skip_when_changed"
+	CheckKeySkipWhenIdle          = servicemgr.KeySkipWhenIdle
 	CheckKeySLA                   = "sla"
 	CheckKeySize                  = "size"
 	CheckKeySocket                = "socket"

@@ -1,6 +1,7 @@
 package servicemgr
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -166,6 +167,13 @@ func ParseBackend(value string) (Backend, error) {
 	default:
 		return "", fmt.Errorf("unknown backend %q (expected %s)", value, BackendInitSummary)
 	}
+}
+
+// IdleReporter is a Manager whose stopped target only waits for demand on
+// another unit, as a libvirt network does behind a socket-activated daemon.
+// Status keeps answering inactive; monitoring asks this to read the target idle.
+type IdleReporter interface {
+	WaitsForTrigger(ctx context.Context) bool
 }
 
 // Status is the normalized service status returned by managers.

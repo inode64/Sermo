@@ -224,6 +224,40 @@ func TestResolveLibvirtNetworkControl(t *testing.T) {
 	}
 }
 
+func TestResolveLibvirtNetworkControlJudgesItsDaemonOnTheHostInit(t *testing.T) {
+	tree := map[string]any{
+		config.SectionControl: map[string]any{
+			virt.ControlKeyType:         virt.NetworkControlType,
+			virt.ControlKeyNetwork:      "default",
+			virt.ControlKeySkipWhenIdle: "virtnetworkd",
+		},
+	}
+	for _, tc := range []struct {
+		backend servicemgr.Backend
+		want    bool
+	}{
+		{backend: servicemgr.BackendSystemd, want: true},
+		{backend: servicemgr.BackendOpenRC},
+	} {
+		runner := &execxtest.Runner{ByLine: map[string]execx.Result{
+			"systemctl is-active -- virtnetworkd.service":                   {Stdout: "inactive\n", ExitCode: 3},
+			"systemctl show -p TriggeredBy --value -- virtnetworkd.service": {Stdout: "virtnetworkd.socket\n"},
+			"systemctl is-active -- virtnetworkd.socket":                    {Stdout: "active\n"},
+		}}
+		target, err := Resolve(t.Context(), "libvirt-net-default", tree, tc.backend, nil, servicemgr.UnitResolver{Runner: runner})
+		if err != nil {
+			t.Fatalf("Resolve(%s) error = %v", tc.backend, err)
+		}
+		reporter, ok := target.Manager.(servicemgr.IdleReporter)
+		if !ok {
+			t.Fatalf("Resolve(%s) manager %T does not report idle", tc.backend, target.Manager)
+		}
+		if got := reporter.WaitsForTrigger(t.Context()); got != tc.want {
+			t.Fatalf("Resolve(%s) WaitsForTrigger() = %v, want %v (calls %v)", tc.backend, got, tc.want, runner.Calls())
+		}
+	}
+}
+
 func TestResolveLibvirtNetworkControlRequiresNetwork(t *testing.T) {
 	_, err := Resolve(context.Background(), "svc", map[string]any{
 		config.SectionControl: map[string]any{

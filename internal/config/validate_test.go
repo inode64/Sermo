@@ -480,6 +480,7 @@ control:
   type: libvirt-network
   network: default
   socket: /run/libvirt/virtnetworkd-sock
+  skip_when_idle: virtnetworkd
 `)
 	mustNotHave(t, valid, "control")
 
@@ -487,6 +488,21 @@ control:
 name: svc
 control: { type: libvirt-network }
 `), "control.network is required")
+	mustHave(t, validateService(t, `
+name: svc
+control:
+  type: libvirt-network
+  network: default
+  skip_when_idle: virtnetworkd.socket
+`), `control.skip_when_idle "virtnetworkd.socket" must be one systemd service name`)
+	mustHave(t, validateService(t, `
+name: svc
+control:
+  type: libvirt-network
+  network: default
+  host: 10.0.0.1
+  skip_when_idle: virtnetworkd
+`), "control.skip_when_idle names a local unit and cannot be combined with host")
 	mustHave(t, validateService(t, `
 name: svc
 control:

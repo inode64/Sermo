@@ -5,7 +5,7 @@
 - [Checks](#checks)
   - [Service health conditions (version / state / config)](#service-health-conditions-version--state--config)
   - [Egress interface (interface)](#egress-interface-interface)
-  - [Check interdependencies (requires / skip_when_changed)](#check-interdependencies-requires--skip_when_changed)
+  - [Check interdependencies (requires / skip_when_changed / skip_when_idle)](#check-interdependencies-requires--skip_when_changed--skip_when_idle)
   - [Reporting mode (reports)](#reporting-mode-reports)
   - [Severity (severity)](#severity-severity)
 - [Ports](#ports)
@@ -455,6 +455,8 @@ config:
   A systemd service that is inactive while an active socket, timer or path unit
   would start it on demand reads `idle`: it passes `expect: active` and shows no
   missing processes. `virtlogd` on a host with no running guest is the usual case.
+  A `control: libvirt-network` service reads `idle` the same way while the daemon
+  named by its `control.skip_when_idle` waits for its socket.
   Operations are unaffected: `sermoctl stop` and `start` still see it inactive.
 
 `on_change.notify` follows the usual notify precedence (omit to inherit the global
@@ -564,7 +566,7 @@ attempts. Cancelling the cycle interrupts name resolution and pending echo I/O.
 A failed lookup or cancelled sample is unavailable and leaves change baselines
 unchanged.
 
-### Check interdependencies (`requires` / `skip_when_changed`)
+### Check interdependencies (`requires` / `skip_when_changed` / `skip_when_idle`)
 
 Any check may declare interdependencies so it is **skipped** (not counted, no
 alert, shown as `skipped`) on a cycle where it should not apply:
@@ -598,6 +600,44 @@ checks:
 Both accept a single value or a list. Gates are evaluated **after** the cycle's
 checks run, so the probe still executes but its result is suppressed; use a check's
 `interval` or remove it to avoid running it at all.
+
+- **`skip_when_idle: [unit, …]`** — do not run the probe at all while a listed
+  systemd service is stopped and only waits for its socket, timer or path unit
+  (the state a `service` check reads as `idle`). Connecting to a
+  socket-activated daemon starts it, so without this a probe that connects
+  (`libvirt`, `tcp`, `http`…) wakes the daemon on every cycle — and at
+  boot it starts the daemon at Sermo's first cycle, whatever ordering the units
+  declare. The result is `skipped`, like the gates above: no alert and no
+  failure, so ordinary rules and remediation do not match it, while a guard that
+  reads it fails closed as it does on any skipped check. A unit that is running, failed, stopped
+  without an active trigger or unreadable runs the probe as usual, so an outage
+  is still reported.
+
+  ```yaml
+  watches:
+    restart-if-libvirt-failed:
+      check:
+        type: libvirt
+        socket: /run/libvirt/virtnetworkd-sock
+        skip_when_idle: virtnetworkd
+        verify: true
+      for: { cycles: 3 }
+      then: { action: restart }
+  ```
+
+  Unlike `requires` and `skip_when_changed`, it is decided **before** the probe
+  runs and also applies to preflight checks and to a host watch's `check:`.
+  Validation refuses it on `file`, `process_policy`, `unowned_processes`,
+  `db_queries` and process-scan `process` watches, which run their own state
+  machine rather than one probe. Name a service, with or
+  without `.service`: its trigger is found through systemd's `TriggeredBy`. Each
+  run costs one `systemctl is-active` while the unit is running and two more
+  queries while it is stopped. On OpenRC, and for a unit with no trigger, it
+  never skips. A probe skipped this way runs again on its next cycle once the
+  unit is active, within its `interval`. A `socket` check only looks at the
+  path and needs none. The catalog's `libvirtd`, `virtqemud` and `virtnetworkd`
+  profiles set it on their `libvirt` probe; a `control: libvirt-network` service
+  sets the same key on its control (see [services](services.md#control-libvirt-network--libvirt-virtual-networks)).
 
 To **restart** a service when a library, file or app version is updated (the
 other half of the example — "if the pam library was updated, restart"), use a
@@ -1989,7 +2029,9 @@ Protocols, in the order of the table above:
   Unix socket `/run/libvirt/libvirt-sock`; set `socket` for a different path such
   as `/run/libvirt/virtqemud-sock` on modular libvirt hosts, or set `host` and/or
   `port` to use plain **TCP** (default `127.0.0.1:16509`). TLS/SASL is not
-  supported.
+  supported. On a socket-activated daemon the connection itself starts it; set
+  [`skip_when_idle`](#check-interdependencies-requires--skip_when_changed--skip_when_idle)
+  to the daemon's unit to leave it asleep until something else needs it.
   **Connect URI:** `query` selects the driver, default `qemu:///system` (e.g.
   `lxc:///`, `xen://`). No auth — local socket access is governed by the socket's
   permissions/polkit. Uses `github.com/digitalocean/go-libvirt`.

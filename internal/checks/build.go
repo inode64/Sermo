@@ -116,6 +116,9 @@ type Deps struct {
 	// Status queries the service's backend status, for `service` checks. When
 	// nil, service checks are skipped with a warning.
 	Status func(context.Context) (servicemgr.Status, error)
+	// UnitIdle reports whether a named systemd service only waits for its
+	// socket, timer or path unit, for `skip_when_idle`. Nil runs every check.
+	UnitIdle servicemgr.UnitIdleFunc
 	// Metrics reads a sampled metric value, for `metric` checks.
 	Metrics MetricReader
 	// ProcessesAny observes host-wide processes matching the supplied executable,
@@ -263,7 +266,10 @@ func buildOne(name string, entry map[string]any, deps Deps, runner execx.Runner,
 		check, failure = buildCheck(typ, b, entry, runner, client, deps)
 		if failure == nil {
 			check = guardPathReads(check, typ, name, deps.Service, entry, b.timeout)
-			return Built{Check: withLimiter(withSummary(check, entry), deps.Limiter, b.timeout), Optional: cfgval.Bool(entry[CheckKeyOptional])}, nil
+			// The idle gate sits outside the limiter: a skip takes no slot of the
+			// shared budget, and its unit queries do not eat the probe's timeout.
+			check = withLimiter(withSummary(check, entry), deps.Limiter, b.timeout)
+			return Built{Check: withIdleGate(check, entry, deps.UnitIdle), Optional: cfgval.Bool(entry[CheckKeyOptional])}, nil
 		}
 	}
 	return Built{}, &BuildIssue{

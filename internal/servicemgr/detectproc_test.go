@@ -3,6 +3,7 @@ package servicemgr
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 	"testing"
 
@@ -534,5 +535,63 @@ func TestUnitWaitsForTrigger(t *testing.T) {
 				t.Fatalf("UnitWaitsForTrigger = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestUnitIdle(t *testing.T) {
+	const state = "systemctl is-active -- virtnetworkd.service"
+	const triggers = "systemctl show -p TriggeredBy --value -- virtnetworkd.service"
+	const triggerStates = "systemctl is-active -- virtnetworkd.socket"
+	waiting := map[string]execx.Result{
+		triggers:      {Stdout: "virtnetworkd.socket\n"},
+		triggerStates: {Stdout: "active\n"},
+	}
+	with := func(unitState execx.Result) map[string]execx.Result {
+		results := maps.Clone(waiting)
+		results[state] = unitState
+		return results
+	}
+	for _, tc := range []struct {
+		name    string
+		backend Backend
+		results map[string]execx.Result
+		errs    map[string]error
+		want    bool
+	}{
+		{name: "inactive with an active socket", backend: BackendSystemd, results: with(execx.Result{Stdout: "inactive\n", ExitCode: 3}), want: true},
+		{name: "running", backend: BackendSystemd, results: with(execx.Result{Stdout: "active\n"})},
+		{name: "failed", backend: BackendSystemd, results: with(execx.Result{Stdout: "failed\n", ExitCode: 3})},
+		{name: "deactivating", backend: BackendSystemd, results: with(execx.Result{Stdout: "deactivating\n", ExitCode: 3})},
+		{name: "inactive without a trigger", backend: BackendSystemd, results: map[string]execx.Result{
+			state: {Stdout: "inactive\n", ExitCode: 3}, triggers: {Stdout: "\n"}}},
+		{name: "unreadable state", backend: BackendSystemd, results: waiting, errs: map[string]error{state: errors.New("timeout")}},
+		{name: "openrc", backend: BackendOpenRC},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &execxtest.Runner{ByLine: tc.results, Errs: tc.errs}
+			if got := UnitIdle(t.Context(), runner, tc.backend, "virtnetworkd"); got != tc.want {
+				t.Fatalf("UnitIdle = %v, want %v", got, tc.want)
+			}
+			if calls := runner.Calls(); tc.backend == BackendOpenRC && len(calls) > 0 {
+				t.Fatalf("UnitIdle ran %v on OpenRC", calls)
+			}
+		})
+	}
+}
+
+func TestValidIdleUnit(t *testing.T) {
+	for unit, want := range map[string]bool{
+		"virtnetworkd":         true,
+		"virtnetworkd.service": true,
+		"openchamber@fran":     true,
+		"":                     false,
+		"virtnetworkd.socket":  false,
+		"multi-user.target":    false,
+		"two units":            false,
+		"../virtnetworkd":      false,
+	} {
+		if got := ValidIdleUnit(unit); got != want {
+			t.Errorf("ValidIdleUnit(%q) = %v, want %v", unit, got, want)
+		}
 	}
 }

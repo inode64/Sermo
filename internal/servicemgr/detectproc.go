@@ -223,6 +223,48 @@ func UnitWaitsForTrigger(ctx context.Context, runner execx.Runner, backend Backe
 	return slices.Contains(strings.Fields(states.Stdout), string(StatusActive))
 }
 
+// UnitIdle reports whether a systemd service is stopped only because it waits
+// for demand: inactive (not failed) while a socket, timer or path unit that
+// activates it is active. Connecting to such a unit's socket starts it, so
+// callers use this to leave it asleep. It answers false for anything it cannot
+// prove, including every non-systemd backend.
+func UnitIdle(ctx context.Context, runner execx.Runner, backend Backend, unit string) bool {
+	if backend != BackendSystemd {
+		return false
+	}
+	runner = execx.RunnerOrDefault(runner)
+	// `is-active` exits non-zero for an inactive unit and still prints its state.
+	state, _ := execx.Run(ctx, runner, defaultDetectTimeout, cmdSystemctl, systemctlCmdIsActive, commandArgTerminator, systemdUnit(unit))
+	if systemdStatus(strings.TrimSpace(state.Stdout)) != StatusInactive {
+		return false
+	}
+	return UnitWaitsForTrigger(ctx, runner, backend, unit)
+}
+
+// UnitIdleFunc answers UnitIdle for a named unit on one host.
+type UnitIdleFunc func(ctx context.Context, unit string) bool
+
+// HostUnitIdle binds UnitIdle to a host's runner and init backend.
+func HostUnitIdle(runner execx.Runner, backend Backend) UnitIdleFunc {
+	return func(ctx context.Context, unit string) bool {
+		return UnitIdle(ctx, runner, backend, unit)
+	}
+}
+
+// KeySkipWhenIdle is the configuration key, on a check and on a libvirt network
+// control, that names the units UnitIdle judges. One literal serves both owners.
+const KeySkipWhenIdle = "skip_when_idle" //nolint:gosec // G101: "SkipWhen" holds the letters "pW"; the value is a config key name, not a credential.
+
+// ValidIdleUnit reports whether unit names a systemd service UnitIdle can judge:
+// one name, without whitespace or path separators, whose only unit suffix may
+// be ".service". A socket, timer or path unit is the trigger, never idle itself.
+func ValidIdleUnit(unit string) bool {
+	if unit == "" || strings.ContainsFunc(unit, func(r rune) bool { return unicode.IsSpace(r) || r == '/' }) {
+		return false
+	}
+	return strings.HasSuffix(systemdUnit(unit), systemdServiceSuffix)
+}
+
 func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcInfo {
 	var blob strings.Builder
 	// In the order openrc-run sources them: the script's ${VAR:-default} and its

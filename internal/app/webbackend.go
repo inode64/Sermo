@@ -456,10 +456,7 @@ func (b *WebBackend) registerService(name string, p preparedService, deps Deps) 
 // attachServiceRuntime wires an enabled service's entry with its operation
 // engine, checks, process discovery, and reload capability.
 func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tree map[string]any, apps []string, target control.Target, deps Deps) []string {
-	serviceDeps := deps
-	serviceDeps.Backend = target.Backend
-	serviceDeps.Manager = target.Manager
-	serviceDeps.BackendPIDs = target.BackendPIDs
+	serviceDeps := WithControlTarget(deps, target)
 	runtime := BuildServiceRuntime(ctx, ServiceRuntimeConfig{
 		Service: name, Unit: target.Unit, Tree: tree, Deps: serviceDeps,
 		LibraryBaseline: deps.ArtifactBaselines.For(name), RecordOperation: operationEventEmitter(deps.Emit),

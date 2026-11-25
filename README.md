@@ -41,8 +41,9 @@ Take MariaDB during a backup. If the packaged profile detects a backup process s
 - **Replaced code detection** — services still running a binary or shared
   library replaced on disk by an update, and `restart_on_change` to restart a
   service when one of its apps or configuration files changes.
-- **Check interdependencies** (`requires` / `skip_when_changed`) so a probe is
-  only run when its prerequisites hold.
+- **Check interdependencies** (`requires` / `skip_when_changed` /
+  `skip_when_idle`) so a probe is only run when its prerequisites hold and, with
+  `skip_when_idle`, does not wake a socket-activated daemon waiting for its socket.
 - **Host watches** — monitor resources that aren't services (mounts, RAID
   arrays, network uplinks, certificates, …), firing hook commands and/or
   notifications, and repairing storage when asked (`then.expand` grows a

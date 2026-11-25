@@ -30,6 +30,9 @@ watches:
     check:
       type: libvirt
       socket: /run/libvirt/virtqemud-sock
+      # Without running guests the daemon exits after its idle timeout; dialing
+      # its socket would start it again on every cycle.
+      skip_when_idle: virtqemud
       timeout: 5s
   alert-if-memory-high:
     check:

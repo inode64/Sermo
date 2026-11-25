@@ -39,7 +39,8 @@ const (
 		virt.ControlKeyGuardSocket + ", " +
 		virt.ControlKeyGuardURI + ", " +
 		virt.ControlKeyHost + ", " +
-		virt.ControlKeyPort
+		virt.ControlKeyPort + ", " +
+		virt.ControlKeySkipWhenIdle
 	processSelectorKeySummary = process.SelectorKeyExe + ", " +
 		process.SelectorKeyCmd + ", " +
 		process.SelectorKeyUser + ", " +
@@ -578,7 +579,7 @@ func validateButtons(tree map[string]any, add addFunc) {
 }
 
 var libvirtControlKeys = set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyDomain, virt.ControlKeyUUID, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort)
-var libvirtNetworkControlKeys = set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyNetwork, virt.ControlKeySocket, virt.ControlKeyGuardSocket, virt.ControlKeyGuardURI, virt.ControlKeyHost, virt.ControlKeyPort)
+var libvirtNetworkControlKeys = set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyNetwork, virt.ControlKeySocket, virt.ControlKeyGuardSocket, virt.ControlKeyGuardURI, virt.ControlKeyHost, virt.ControlKeyPort, virt.ControlKeySkipWhenIdle)
 var dockerControlKeys = set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer, dockerctl.ControlKeyCompose)
 var buttonKeys = set(ButtonKeyLabel, ButtonKeyCommand, ButtonKeyTimeout)
 

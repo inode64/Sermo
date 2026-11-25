@@ -115,18 +115,16 @@ func (s *operationSession) prepare(ctx context.Context, service string, resolved
 		Service: service,
 		Unit:    target.Unit,
 		Tree:    resolved.Tree,
-		Deps: app.Deps{
-			Backend:          target.Backend,
+		Deps: app.WithControlTarget(app.Deps{
+			Backend:          s.backend,
 			CheckLimiter:     s.checkLimiter,
-			Manager:          target.Manager,
-			BackendPIDs:      target.BackendPIDs,
 			Runtime:          s.cfg.Global.RuntimeDir(),
 			DefaultTimeout:   engineDefaultTimeout(s.cfg),
 			OperationTimeout: manualOperationTimeout(s.cfg, s.opts),
 			Collector:        metrics.New(metrics.OSReader{}),
 			ExecxRunner:      s.app.Runner,
 			UserLookup:       app.EngineUserLookup(s.cfg, s.app.Runner),
-		},
+		}, target),
 		LibraryBaseline: app.NewArtifactBaseline(),
 		LockReclaimed: func(service, reason string) {
 			s.recordLockReclaim(ctx, app.OperationLockReclaim(service, reason))

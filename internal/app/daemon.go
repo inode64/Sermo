@@ -155,7 +155,12 @@ type Deps struct {
 	// BackendPIDs reports backend-owned process roots for the resolved service
 	// (systemd cgroup PIDs, Docker container init PID, etc.). Optional: nil lets
 	// the runtime derive init-backend PIDs when that is supported.
-	BackendPIDs      func() []int
+	BackendPIDs func() []int
+	// UnitIdle answers skip_when_idle on the host's init system. Service wiring
+	// fills it before a control target replaces Backend, which then names the
+	// target's manager and no longer the init system the named units live in.
+	// Optional: nil judges units on Backend.
+	UnitIdle         servicemgr.UnitIdleFunc
 	Runtime          string
 	DefaultTimeout   time.Duration
 	OperationTimeout time.Duration
@@ -449,10 +454,7 @@ func buildServiceWorker(ctx context.Context, resolution config.ServiceResolution
 	if target.Unit == "" {
 		return b
 	}
-	serviceDeps := deps
-	serviceDeps.Backend = target.Backend
-	serviceDeps.Manager = target.Manager
-	serviceDeps.BackendPIDs = target.BackendPIDs
+	serviceDeps := WithControlTarget(deps, target)
 	if target.Backend != deps.Backend {
 		// A Docker or libvirt target is not an init unit the listing can name.
 		serviceDeps.ActiveUnits = nil
@@ -789,19 +791,53 @@ func activeUnitStatus(snapshot *servicemgr.ActiveUnitSnapshot, unit string, live
 }
 
 // idleUnitStatus is the status monitoring reads: an inactive unit that only waits
-// for its socket, timer or path unit is idle rather than down. Operations keep
-// the plain status, and only an inactive reading pays for the extra query.
+// for its socket, timer or path unit is idle rather than down, and so is a
+// target whose manager waits on such a unit (a libvirt network behind its
+// socket-activated daemon). Operations keep the plain status, and only an
+// inactive reading pays for the extra query.
 func idleUnitStatus(deps Deps, unit string, live func(context.Context) (servicemgr.Status, error)) func(context.Context) (servicemgr.Status, error) {
 	if live == nil {
 		return nil
 	}
+	reporter, reports := deps.Manager.(servicemgr.IdleReporter)
 	return func(ctx context.Context) (servicemgr.Status, error) {
-		status, err := live(ctx)
-		if err == nil && status == servicemgr.StatusInactive && servicemgr.UnitWaitsForTrigger(ctx, deps.ExecxRunner, deps.Backend, unit) {
+		// A manager waiting on another unit is asked first and once: its own
+		// Status asks again, and a daemon woken between the two reads would turn
+		// an idle target into a false inactive one.
+		if reports && reporter.WaitsForTrigger(ctx) {
 			return servicemgr.StatusIdle, nil
 		}
-		return status, err
+		status, err := live(ctx)
+		if err != nil || status != servicemgr.StatusInactive || reports {
+			return status, err
+		}
+		if servicemgr.UnitWaitsForTrigger(ctx, deps.ExecxRunner, deps.Backend, unit) {
+			return servicemgr.StatusIdle, nil
+		}
+		return status, nil
 	}
+}
+
+// hostUnitIdle judges skip_when_idle units on deps' init system: the one already
+// recorded in UnitIdle, otherwise Backend, which is still the host's own until a
+// control target replaces it.
+func hostUnitIdle(deps Deps) servicemgr.UnitIdleFunc {
+	if deps.UnitIdle != nil {
+		return deps.UnitIdle
+	}
+	return servicemgr.HostUnitIdle(deps.ExecxRunner, deps.Backend)
+}
+
+// WithControlTarget returns deps for a service resolved to target: Backend,
+// Manager and BackendPIDs become the target's. UnitIdle is fixed first, on the
+// host's init system, because a controlled target's Backend (libvirt, Docker)
+// no longer names the init system that skip_when_idle units live in.
+func WithControlTarget(deps Deps, target control.Target) Deps {
+	deps.UnitIdle = hostUnitIdle(deps)
+	deps.Backend = target.Backend
+	deps.Manager = target.Manager
+	deps.BackendPIDs = target.BackendPIDs
+	return deps
 }
 
 // checkEpisodesFromSnapshots restores the last check-health edge after a daemon
