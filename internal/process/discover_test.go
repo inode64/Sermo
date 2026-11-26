@@ -190,6 +190,41 @@ func TestCountInTree(t *testing.T) {
 	}
 }
 
+func TestProcessCountsIncludeReplacedWorkers(t *testing.T) {
+	const worker = "/opt/app/worker"
+	reader := fakeReader{ids: map[int]Identity{
+		100: {PID: 100, UID: 0, Exe: "/opt/app/supervisor", ExeOK: true},
+		101: {PID: 101, PPID: 100, UID: 600, ExePrev: worker},
+		102: {PID: 102, PPID: 100, UID: 600, ExePrev: worker + "-other"},
+		103: {PID: 103, PPID: 100, UID: 700, ExePrev: worker},
+		104: {PID: 104, PPID: 100, UID: 600, Exe: worker},
+		200: {PID: 200, UID: 600, ExePrev: worker},
+	}}
+	d := Discoverer{Reader: reader, ResolveUser: fakeUsers(map[string]uint32{"root": 0, "worker": 600})}
+	selectors := []Selector{{Type: SelectorCommandMatch, Exe: "/opt/app/supervisor", User: "root"}}
+	for _, tc := range []struct {
+		name, exe, dir string
+		host, tree     int
+	}{
+		{name: "exact executable", exe: worker, host: 2, tree: 1},
+		{name: "executable directory", dir: "/opt/app", host: 3, tree: 2},
+		{name: "different executable", exe: "/opt/other/worker"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, known := d.CountMatching("worker", tc.exe, tc.dir); !known || got != tc.host {
+				t.Fatalf("host count=%d known=%v, want %d", got, known, tc.host)
+			}
+			if got, known := d.CountInTree(selectors, "worker", tc.exe, tc.dir); !known || got != tc.tree {
+				t.Fatalf("service count=%d known=%v, want %d", got, known, tc.tree)
+			}
+		})
+	}
+	strict := []Selector{{Type: SelectorCommandMatch, Exe: worker, User: "worker"}}
+	if _, matched := d.StrictMatchPID(101, strict); matched {
+		t.Fatal("counting a replaced worker must not authorize its strict identity")
+	}
+}
+
 func TestCountInFiltersDiscoveredProcesses(t *testing.T) {
 	d := Discoverer{Reader: fakeReader{}, ResolveUser: fakeUsers(map[string]uint32{"svc": 500})}
 	procs := []Process{

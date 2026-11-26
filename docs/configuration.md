@@ -3257,7 +3257,11 @@ is still in it (see [`strays`](#strays--processes-the-service-cannot-account-for
 
 - `process_count` counts only that set, so it is immune to unrelated host
   processes that share a user or exe. An optional `user`/`exe`/`exe_dir` narrows
-  *within* it.
+  *within* it. Executable filters also count a live process whose executable was
+  replaced on disk, using the previous path reported by the kernel. This applies
+  to host counts too: an upgrade does not make a running worker absent. The
+  separate replaced-binary check still reports its need for renewal, and the
+  count grants no signal authority.
 - `metric` (`cpu`, `cpu_thread`, `memory`, `io`, …) reads the **service scope**
   by default — the summed reading over that same tree — from a dedicated per-watch
   collector, so its rate deltas never collide with the engine's metric sampling.

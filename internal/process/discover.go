@@ -780,10 +780,11 @@ func (d Discoverer) ReplacedAny(exes []string, user string) []string {
 // CountMatching counts processes matching the given filter. Each non-empty
 // field narrows the count (ANDed); an all-empty filter counts every process on
 // the host. user is the real-UID owner, exe is the exact resolved
-// /proc/<pid>/exe, and exeDir matches any process whose resolved executable is
-// under that directory. Reuses the Discoverer's process snapshot (shared cache
-// in the daemon). known is false when the count proves nothing, because the
-// process table is incomplete or user did not resolve.
+// /proc/<pid>/exe (including its previous path after replacement), and exeDir
+// matches any process whose executable is under that directory. Reuses the
+// Discoverer's process snapshot (shared cache in the daemon). known is false
+// when the count proves nothing, because the process table is incomplete or the
+// user did not resolve.
 func (d Discoverer) CountMatching(user, exe, exeDir string) (int, bool) {
 	f, ok := d.buildProcessFilter(user, exe, exeDir)
 	if !ok {
@@ -882,10 +883,18 @@ func (f processFilter) match(uid uint32, exeOK bool, exe string) bool {
 }
 
 func (f processFilter) matchesIdentity(id Identity) bool {
+	// Replacement changes the file on disk, not whether the process exists.
+	// This observation never participates in selector or signal authorization.
+	if !id.ExeOK && id.ExePrev != "" {
+		return f.match(id.UID, true, id.ExePrev)
+	}
 	return f.match(id.UID, id.ExeOK, id.Exe)
 }
 
 func (f processFilter) matchesProcess(p *Process) bool {
+	if !p.ExeOK && p.ExePrev != "" {
+		return f.match(p.UID, true, p.ExePrev)
+	}
 	return f.match(p.UID, p.ExeOK, p.Exe)
 }
 
