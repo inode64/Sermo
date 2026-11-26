@@ -782,6 +782,14 @@ Kill decisions depend on how process facts are read, so this is fixed:
   instances. Every matching main root must also have readable, non-foreign
   ownership. Ambiguous or unknown ownership blocks cleanup. Use instance-specific
   selectors for shared executables; Sermo never resolves ambiguity by process name.
+  An operation's own tracking lifts that refusal: a generation its earlier
+  observation attributed to the service without refusal is a tracked survivor,
+  signalled on proven membership of the unit's own control group. A daemon that
+  forks one same-binary worker per session (Exim, ProFTPD) leaves its sessions
+  hanging off PID 1 once it exits, where a fresh look counts them as instances;
+  the stop that saw them under the daemon applies the stop policy to them
+  instead. A process first seen after the stop, or one that left the group,
+  keeps the refusal, and a later operation has no such tracking.
 - **PID 1 and kernel threads are protected** from terminating signals even if a
   future selector or signal path would otherwise target them. Non-terminating
   reload signals such as `SIGHUP` are not blocked by this guard.
@@ -968,7 +976,9 @@ the unit's `KillMode` and on `stop_policy.keep_children`:
     `auto`. This also covers a stray that discovery only tracks from before the
     stop — an OpenRC unit stops listing its control group once the daemon takes
     its pidfile along: membership of the unit's own group still proves
-    ownership, while one that moved to another group keeps its refusal. A
+    ownership, while one that moved to another group keeps its refusal; so do
+    same-binary sessions of a replaced binary (see "External deleted
+    executables require ownership evidence"). A
     residual that survives, or one without control-group proof (such as on an
     OpenRC host without per-service cgroups), ends the operation in
     `orphan_processes` with the service left stopped.

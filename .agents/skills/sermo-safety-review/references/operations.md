@@ -57,6 +57,11 @@
    and a live match re-reads the link instead of guessing. A live executable
    below a replaced directory link (a JVM's `bin/java`) also requires that
    current exact resolution; it does not extend deleted-executable naming.
+   A deleted-executable candidate's ownership refusal becomes a tracked
+   survivor's (`RetainSurvivors`) only for a generation the previous observation
+   attributed without refusal; `reattributeUnitMembers` then lifts it on
+   unit-cgroup membership. A process first seen after the stop carries the
+   candidate's refusal from round to round.
 9. Incomplete rediscovery stops signal escalation. Keep stop-command,
    auxiliary-stop and artifact warnings in the one audit result even if a
    subsequent phase fails or times out.

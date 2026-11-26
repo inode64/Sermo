@@ -162,39 +162,58 @@ func TestRestartClearsTrackedStrayStillInTheUnitCgroup(t *testing.T) {
 	}
 }
 
-// keepChildrenTable is the process table of a daemon whose session child
-// outlives it in the unit's cgroup: the daemon goes with the stop (the child
-// reparents to PID 1), a replacement appears with the start, and the child exits
-// only when it is signalled.
+// keepChildrenTable is the process table of a daemon whose session children
+// outlive it in the unit's cgroup: the daemon goes with the stop (the children
+// reparent to PID 1), a replacement appears with the start, and a child exits
+// only when it is signalled (gone).
 type keepChildrenTable struct {
-	mgr                          *fakeManager
-	daemon, session, replacement process.Identity
-	sessionGone                  bool
-	// earlier is an optional surviving daemon instance the stop must clear.
-	earlier     process.Identity
-	earlierGone bool
+	mgr                 *fakeManager
+	daemon, replacement process.Identity
+	sessions            []process.Identity
+	// earlier is an optional surviving daemon instance the stop must clear;
+	// late an optional process that appears only once the daemon stopped.
+	earlier, late process.Identity
+	gone          map[int]bool
+}
+
+func (r *keepChildrenTable) started() bool {
+	return slices.ContainsFunc(r.mgr.calls, func(call string) bool { return strings.HasPrefix(call, "start ") })
 }
 
 func (r *keepChildrenTable) current() map[int]process.Identity {
 	ids := map[int]process.Identity{}
-	started := slices.ContainsFunc(r.mgr.calls, func(call string) bool { return strings.HasPrefix(call, "start ") })
+	started := r.started()
 	switch {
 	case started:
 		ids[r.replacement.PID] = r.replacement
 	case !r.mgr.stopped:
 		ids[r.daemon.PID] = r.daemon
 	}
-	if !r.sessionGone {
-		session := r.session
+	for _, session := range r.sessions {
+		if r.gone[session.PID] {
+			continue
+		}
 		if r.mgr.stopped || started {
 			session.PPID = 1
 		}
 		ids[session.PID] = session
 	}
-	if r.earlier.PID != 0 && !r.earlierGone {
+	if r.earlier.PID != 0 && !r.gone[r.earlier.PID] {
 		ids[r.earlier.PID] = r.earlier
 	}
+	if r.late.PID != 0 && r.mgr.stopped && !r.gone[r.late.PID] {
+		ids[r.late.PID] = r.late
+	}
 	return ids
+}
+
+// openRCBackendPIDs lists the unit's group only while the daemon that owns the
+// pidfile is alive, as OpenRC does.
+func (r *keepChildrenTable) openRCBackendPIDs() []int {
+	if r.mgr.stopped || r.started() {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(r.current()))
 }
 
 func (r *keepChildrenTable) PIDs() ([]int, error) { return slices.Collect(maps.Keys(r.current())), nil }
@@ -226,7 +245,7 @@ func TestNewKeepChildrenReachesDiscovery(t *testing.T) {
 			dir := t.TempDir()
 			locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 			mgr := &fakeManager{status: servicemgr.StatusActive}
-			table := &keepChildrenTable{mgr: mgr, daemon: daemon, session: session, replacement: replacement}
+			table := &keepChildrenTable{mgr: mgr, daemon: daemon, sessions: []process.Identity{session}, replacement: replacement, gone: map[int]bool{}}
 			engine := New(Config{
 				Service: "sshd",
 				Unit:    "sshd",
@@ -248,9 +267,7 @@ func TestNewKeepChildrenReachesDiscovery(t *testing.T) {
 				Sleep: func(time.Duration) {},
 			})
 			signaler := &pidSignaler{onSignal: func(pid int, _ syscall.Signal) {
-				if pid == session.PID {
-					table.sessionGone = true
-				}
+				table.gone[pid] = true
 			}}
 			engine.Reaper.Signaler = signaler
 
@@ -261,8 +278,8 @@ func TestNewKeepChildrenReachesDiscovery(t *testing.T) {
 			if !slices.Equal(signaler.calls, tc.wantSignals) {
 				t.Fatalf("signals = %v, want %v", signaler.calls, tc.wantSignals)
 			}
-			if table.sessionGone == tc.keep {
-				t.Fatalf("session gone = %v with keep_children %v", table.sessionGone, tc.keep)
+			if table.gone[session.PID] == tc.keep {
+				t.Fatalf("session gone = %v with keep_children %v", table.gone[session.PID], tc.keep)
 			}
 		})
 	}
@@ -292,7 +309,7 @@ func TestRestartKeepsSameBinaryChildThatOutlivesItsDaemon(t *testing.T) {
 			dir := t.TempDir()
 			locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 			mgr := &fakeManager{status: servicemgr.StatusActive}
-			table := &keepChildrenTable{mgr: mgr, daemon: identity(100, 1, 10), session: identity(200, 100, 20), replacement: identity(300, 1, 30), earlier: tc.earlier}
+			table := &keepChildrenTable{mgr: mgr, daemon: identity(100, 1, 10), sessions: []process.Identity{identity(200, 100, 20)}, replacement: identity(300, 1, 30), earlier: tc.earlier, gone: map[int]bool{}}
 			engine := New(Config{
 				Service: "cron",
 				Unit:    "crond",
@@ -318,22 +335,15 @@ func TestRestartKeepsSameBinaryChildThatOutlivesItsDaemon(t *testing.T) {
 				},
 				Sleep: func(time.Duration) {},
 			})
-			signaler := &pidSignaler{onSignal: func(pid int, _ syscall.Signal) {
-				switch pid {
-				case tc.earlier.PID:
-					table.earlierGone = true
-				default:
-					table.sessionGone = true
-				}
-			}}
+			signaler := &pidSignaler{onSignal: func(pid int, _ syscall.Signal) { table.gone[pid] = true }}
 			engine.Reaper.Signaler = signaler
 
 			res := engine.Do(context.Background(), actionRestart)
 			if res.Status != ResultOK {
 				t.Fatalf("status = %q (%s), want ok; signals = %v", res.Status, res.Message, signaler.calls)
 			}
-			if !slices.Equal(signaler.calls, tc.wantSignals) || table.sessionGone {
-				t.Fatalf("signals = %v, want %v; kept child gone = %v", signaler.calls, tc.wantSignals, table.sessionGone)
+			if !slices.Equal(signaler.calls, tc.wantSignals) || table.gone[200] {
+				t.Fatalf("signals = %v, want %v; kept child gone = %v", signaler.calls, tc.wantSignals, table.gone[200])
 			}
 			if !mgr.did("start crond") {
 				t.Fatalf("calls = %v, want a start", mgr.calls)

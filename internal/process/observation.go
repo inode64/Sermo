@@ -194,6 +194,13 @@ const ReasonTrackedOutsideDiscovery = "tracked process remains outside service d
 // to PID 1 and a fresh look cannot tell a same-binary child from a surviving
 // daemon instance; the earlier observation that saw it under the daemon can.
 // Keeping it only removes signal authority.
+//
+// For the same reason, a generation the earlier observation attributed without
+// refusal, which a fresh look only finds as an external candidate refused for
+// ownership (a daemon's forked sessions after an upgrade replaced its binary),
+// is a tracked survivor outside discovery: unit-cgroup membership may prove it
+// the service's, as for any survivor discovery stopped listing. A process first
+// seen after the earlier observation keeps the candidate's refusal.
 func (o Observation) RetainSurvivors(previous []Process) []Process {
 	procs := slices.Clone(o.Processes)
 	for _, old := range previous {
@@ -217,10 +224,16 @@ func (o Observation) RetainSurvivors(previous []Process) []Process {
 			procs = append(procs, p)
 			continue
 		}
-		if old.UID != id.UID || old.Cgroup != id.Cgroup ||
+		switch {
+		case old.UID != id.UID || old.Cgroup != id.Cgroup ||
 			old.signalExecutable() != procs[index].signalExecutable() ||
-			old.ExeFile.Inode != 0 && old.ExeFile != id.ExeFile {
+			old.ExeFile.Inode != 0 && old.ExeFile != id.ExeFile:
 			procs[index].SignalBlockReason = "tracked process identity changed during cleanup"
+		case old.SignalBlockReason == "" && procs[index].External && procs[index].SignalBlockReason != "" &&
+			old.SameGeneration(procs[index]):
+			// Only a proven generation stands in for discovery's attribution: an
+			// unknown start tick could be a recycled PID.
+			procs[index].SignalBlockReason = ReasonTrackedOutsideDiscovery
 		}
 		if old.SignalBlockReason != "" {
 			procs[index].SignalBlockReason = old.SignalBlockReason

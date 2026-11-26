@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sermo/internal/servicemgr"
 )
 
 func TestObserveDistinguishesAbsenceFromUncertainty(t *testing.T) {
@@ -373,5 +375,88 @@ func TestPrincipalIdentityInIgnoresAVanishedProcess(t *testing.T) {
 	got := d.PrincipalIdentityIn([]Process{{PID: 100, Role: RoleMain, Source: SourceBackend}}, []Selector{main})
 	if got.Attributed || got.Unverified() {
 		t.Fatalf("vanished process principal = %+v, want no evidence", got)
+	}
+}
+
+// A daemon's forked sessions outlive its stop on the binary an upgrade
+// replaced, hanging off PID 1: a fresh look refuses them as competing
+// instances. A generation the earlier observation attributed is a tracked
+// survivor instead, round after round; one first seen later keeps the refusal.
+func TestObserveTrackedRetainsAttributedReplacedBinarySessions(t *testing.T) {
+	const cgroup = "0::/openrc.exim"
+	selectors := []Selector{{Name: RoleMain, Type: SelectorCommandMatch, Exe: testExe, User: "root"}}
+	deleted := func(pid, ppid int, ticks uint64) Identity {
+		return Identity{PID: pid, PPID: ppid, UID: 0, ExePrev: testExe, ExeFile: ExecutableFile{Device: 1, Inode: 7},
+			StartTicks: ticks, StartTicksOK: true, Cgroup: cgroup}
+	}
+	d := Discoverer{
+		Reader:           fakeReader{ids: map[int]Identity{10: deleted(10, 1, 100), 11: deleted(11, 10, 110), 12: deleted(12, 10, 120)}},
+		ResolveUser:      fakeUsers(map[string]uint32{"root": 0}),
+		BackendPIDs:      func() []int { return []int{10, 11, 12} },
+		ProcessOwnership: func(id Identity) (bool, bool) { return servicemgr.CgroupOwnership(id.Cgroup, "exim") },
+	}
+	before, err := d.Observe(selectors)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.BackendPIDs = nil
+	d.Reader = fakeReader{ids: map[int]Identity{11: deleted(11, 1, 110), 12: deleted(12, 1, 120), 13: deleted(13, 1, 130)}}
+	tracked := before.Processes
+	for round := range 2 {
+		after, err := d.ObserveTracked(selectors, tracked)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reasons := map[int]string{}
+		for _, p := range after.Processes {
+			reasons[p.PID] = p.SignalBlockReason
+		}
+		if reasons[11] != ReasonTrackedOutsideDiscovery || reasons[12] != ReasonTrackedOutsideDiscovery {
+			t.Fatalf("round %d: sessions refused with %q, %q; want tracked survivors", round, reasons[11], reasons[12])
+		}
+		if late := reasons[13]; late == "" || late == ReasonTrackedOutsideDiscovery {
+			t.Fatalf("round %d: late process reason %q, want the candidate's refusal", round, late)
+		}
+		// The operation lifts the tracked survivors' refusal on unit membership.
+		tracked = after.Processes
+		for i := range tracked {
+			if tracked[i].SignalBlockReason == ReasonTrackedOutsideDiscovery {
+				tracked[i].SignalBlockReason = ""
+			}
+		}
+	}
+}
+
+// An earlier observation with an unknown start tick proves no generation: the
+// process now at that PID may be a recycled one, so it keeps its refusal.
+func TestObserveTrackedNeedsAProvenGenerationToRetainASession(t *testing.T) {
+	const cgroup = "0::/openrc.exim"
+	selectors := []Selector{{Name: RoleMain, Type: SelectorCommandMatch, Exe: testExe, User: "root"}}
+	session := func(pid int, ticks uint64) Identity {
+		return Identity{PID: pid, PPID: 1, UID: 0, ExePrev: testExe, ExeFile: ExecutableFile{Device: 1, Inode: 7},
+			StartTicks: ticks, StartTicksOK: true, Cgroup: cgroup}
+	}
+	d := Discoverer{
+		Reader:           fakeReader{ids: map[int]Identity{11: session(11, 110), 12: session(12, 120)}},
+		ResolveUser:      fakeUsers(map[string]uint32{"root": 0}),
+		ProcessOwnership: func(id Identity) (bool, bool) { return servicemgr.CgroupOwnership(id.Cgroup, "exim") },
+	}
+	previous := []Process{
+		{PID: 11, UID: 0, ExePrev: testExe, ExeFile: ExecutableFile{Device: 1, Inode: 7}, Cgroup: cgroup},
+		{PID: 12, UID: 0, ExePrev: testExe, ExeFile: ExecutableFile{Device: 1, Inode: 7}, StartTicks: 120, Cgroup: cgroup},
+	}
+	after, err := d.ObserveTracked(selectors, previous)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reasons := map[int]string{}
+	for _, p := range after.Processes {
+		reasons[p.PID] = p.SignalBlockReason
+	}
+	if reasons[11] == "" || reasons[11] == ReasonTrackedOutsideDiscovery {
+		t.Fatalf("unknown generation reason %q, want the candidate's refusal", reasons[11])
+	}
+	if reasons[12] != ReasonTrackedOutsideDiscovery {
+		t.Fatalf("proven generation reason %q, want a tracked survivor", reasons[12])
 	}
 }
