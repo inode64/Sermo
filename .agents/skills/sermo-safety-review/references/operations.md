@@ -62,6 +62,9 @@
    attributed without refusal; `reattributeUnitMembers` then lifts it on
    unit-cgroup membership. A process first seen after the stop carries the
    candidate's refusal from round to round.
+   An automatic start or restart that ends in `orphan_processes` owes one start
+   (`internal/app/worker_owed_start.go`). It runs only after every listed
+   generation is proven gone, and still goes through the engine.
 9. Incomplete rediscovery stops signal escalation. Keep stop-command,
    auxiliary-stop and artifact warnings in the one audit result even if a
    subsequent phase fails or times out.

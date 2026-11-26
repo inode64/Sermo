@@ -41,6 +41,11 @@ policy state in `internal/rules/state.go`.
   engine; a rule may keep firing while the policy suppresses execution.
 - Manual actions bypass the whole policy (cooldown, `max_actions`, backoff)
   but never guards, locks or preflight.
+- One automatic exemption: the start owed after an automatic start or restart
+  ended in `orphan_processes` (`runOwedStart`) skips the cooldown and backoff
+  (`Policy.AllowWithinCooldown`) but not `max_actions`, guards, locks or
+  preflight. It runs once, after the residual generations are proven gone, and
+  its cycle evaluates no other remediation.
 - An unavailable or erroring guard leaf fails closed. Unavailable or skipped
   observations remain unknown through `not` and `and`; an `or` holds as soon
   as one operand holds, so its outcome never depends on operand order.
@@ -104,6 +109,7 @@ system-scope metric rejected in remediation
 shared probe runs once per cycle
 cooldown suppresses; zero or missing cooldown invalid; max_actions within window
 manual action exempt from cooldown but not from guards, locks or preflight
+owed start exempt from cooldown and backoff, not from max_actions; once, after proven exit
 ```
 
 A required service `supervised_process` reading distinguishes a missing worker

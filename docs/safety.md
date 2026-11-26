@@ -444,6 +444,13 @@ The automatic-remediation rate-limit state is stored in `engine.state`, so a
 `sermod` restart or host reboot does not clear cooldown/backoff or the
 `max_actions` window.
 
+One exception keeps a service from staying down for a whole cooldown: an
+automatic start or restart that ends in `orphan_processes` owes one start, made
+once those exact residual generations have exited and still within
+`max_actions`, guards, locks and preflight (see
+[rules.md](rules.md#remediation-policy)). Unlike the cooldown, it is held in
+memory: a `sermod` restart during the wait drops it.
+
 ## Pausing monitoring
 
 `sermoctl unmonitor SERVICE` pauses monitoring for a service; `monitor SERVICE`
@@ -981,7 +988,8 @@ the unit's `KillMode` and on `stop_policy.keep_children`:
     executables require ownership evidence"). A
     residual that survives, or one without control-group proof (such as on an
     OpenRC host without per-service cgroups), ends the operation in
-    `orphan_processes` with the service left stopped.
+    `orphan_processes` with the service left stopped until those processes
+    exit ([Rate limiting](#rate-limiting)).
 
 When a stray blocks the restart, the result names it and the setting that keeps
 such a workload on purpose:

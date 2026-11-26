@@ -101,6 +101,7 @@ type workerSnapshot struct {
 	windows            map[string]*rules.WindowState
 	libBaseline        *artifactBaselineState
 	checkEpisodes      map[string]checkEpisode
+	owedStart          *owedStart
 }
 
 func captureWorkerState(workers []*Worker) map[string]workerSnapshot {
@@ -122,6 +123,9 @@ func captureWorkerState(workers []*Worker) map[string]workerSnapshot {
 		if len(w.checkEpisodes) > 0 {
 			snap.checkEpisodes = maps.Clone(w.checkEpisodes)
 		}
+		// A reload during the residuals' drain must not leave the service down
+		// for the cooldown.
+		snap.owedStart = w.owedStart
 		out[w.Service] = snap
 	}
 	return out
@@ -151,6 +155,7 @@ func applyWorkerState(workers []*Worker, saved map[string]workerSnapshot) {
 		if snap.checkEpisodes != nil {
 			w.checkEpisodes = snap.checkEpisodes
 		}
+		w.owedStart = snap.owedStart
 	}
 }
 

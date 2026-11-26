@@ -1512,7 +1512,8 @@ nothing. Such a residual still receives `SIGTERM` when the kernel places it in
 the unit's own control group (`SIGKILL` too with `force_kill: true` or `auto`);
 with `keep_children` only a surviving principal can be such a residual. One that
 survives, or that has no control-group proof, remains an `orphan_processes`
-failure and the restart never starts a second daemon.
+failure and the restart never starts a second daemon; an automatic one starts
+the service once those processes exit ([rules.md](rules.md#remediation-policy)).
 `force_kill: true` still requires the explicit `kill_only_if` selector and is
 the appropriate override when the configured process identities are not the
 desired kill set; `force_kill: false` rules out `SIGKILL` altogether.

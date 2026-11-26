@@ -222,6 +222,11 @@ type Worker struct {
 	// artifactSamples provides cadence-limited catalog app/library/file observations.
 	artifactSamples *ArtifactSamples
 	renewal         *serviceRenewal
+	// owedStart is the start an automatic operation that left the service
+	// stopped beside residual processes still owes it (see runOwedStart).
+	owedStart *owedStart
+	// generationExited proves a residual gone; nil reads /proc.
+	generationExited func(pid int, ticks uint64) (bool, error)
 }
 
 type workerCycleMode struct {
@@ -309,6 +314,8 @@ func (w *Worker) monitoringPaused() bool {
 
 func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() time.Time) (workerCycleMode, bool) {
 	if w.monitoringPaused() {
+		// A paused service is the operator's: no owed start survives it.
+		w.owedStart = nil
 		w.clearObservability()
 		w.Settling.MarkObserved(settleKey)
 		for _, window := range w.windows {
@@ -322,6 +329,13 @@ func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() 
 	var running bool
 	mode.settlingPhase, running = w.operationSettlingState(now())
 	mode.operation = mode.settlingPhase != ""
+	if mode.operation || running {
+		// Another operation, an operator's included, has acted or is acting on
+		// the service since the one that owed the start: it is no longer owed.
+		// One that leaves no marker behind (a stop that is not OK) is only seen
+		// while it runs.
+		w.owedStart = nil
+	}
 	if running {
 		w.clearObservability()
 		if mode.startup {
@@ -892,6 +906,11 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 	if w.State == nil {
 		w.State = &rules.RemediationState{}
 	}
+	// Like the observe-only cycle after any operation, the owed start's cycle
+	// evaluates no remediation rule.
+	if w.runOwedStart(ctx, now) {
+		return
+	}
 	firing := w.firingRemediationRules(ctx, ev, at, evals)
 
 	// A healthy cycle (no remediation rule fired) decays the backoff. Dry-run
@@ -953,10 +972,7 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 		return false
 	}
 	if w.InPanic != nil && w.InPanic() {
-		w.emitAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
-		if w.shouldEmitRuleEvent(firing.Rule, firing.announce()) {
-			w.emit(Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name, Action: action, Message: "panic mode: remediation suppressed"})
-		}
+		w.alertSuppressed(ctx, ev, firing, action, panicRemediationSuppressed)
 		return false
 	}
 	refusal, refused := w.refusedRemediations[firing.Name]
@@ -971,10 +987,7 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 		var wait string
 		renewal, wait = w.renewal.begin(ctx, w.Service, ev.Cache, w.cycleRan)
 		if wait != "" {
-			w.emitAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
-			if w.shouldEmitRuleEvent(firing.Rule, firing.announce()) {
-				w.emit(Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name, Action: action, Message: wait})
-			}
+			w.alertSuppressed(ctx, ev, firing, action, wait)
 			return false
 		}
 	}
@@ -994,8 +1007,21 @@ func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, 
 	} else {
 		w.emitAlerts(ctx, ev, firing.Rule, announce, firing.change, firing.severity)
 	}
-	completedMaintenance = w.executeRemediation(ctx, now, firing, action, renewal)
+	completedMaintenance = w.executeRemediation(ctx, now, firing, action, renewal, true)
 	return true
+}
+
+// panicRemediationSuppressed is the audit text of an automatic action panic mode
+// holds back.
+const panicRemediationSuppressed = "panic mode: remediation suppressed"
+
+// alertSuppressed delivers the firing rule's alerts and records why its action
+// was held back this cycle.
+func (w *Worker) alertSuppressed(ctx context.Context, ev *rules.Evaluator, firing firingRule, action, message string) {
+	w.emitAlerts(ctx, ev, firing.Rule, firing.announce(), firing.change, firing.severity)
+	if w.shouldEmitRuleEvent(firing.Rule, firing.announce()) {
+		w.emit(Event{Kind: eventKindSuppressed, Severity: firing.severity, Rule: firing.Name, Action: action, Message: message})
+	}
 }
 
 func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator, firing firingRule, action string, now func() time.Time) (string, bool) {
@@ -1063,7 +1089,8 @@ func (w *Worker) emitDryRunRemediation(ctx context.Context, ev *rules.Evaluator,
 	}
 }
 
-func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, firing firingRule, action string, renewal map[string]string) bool {
+// mayOweStart is false for the owed start itself, which owes nothing more.
+func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, firing firingRule, action string, renewal map[string]string, mayOweStart bool) bool {
 	operate := w.operateForRemediation
 	if w.Cascade != nil && operation.CascadesAlsoApply(action) {
 		operate = w.Cascade
@@ -1091,6 +1118,9 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 		event.Notice, event.Severity = true, severity.Info
 	}
 	event.Message = result.AuditMessageWith(w.expandRuntime(result.Message, event))
+	if mayOweStart && w.noteOwedStart(firing, action, result) {
+		event.Message += owedStartPending
+	}
 	w.emitLiteral(event)
 	if recovered != nil {
 		panic(recovered)

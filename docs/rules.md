@@ -4912,6 +4912,28 @@ still alerts while waiting. These per-rule refusal delays end with the incident 
 reload/restart, which refreshes the configuration and refusal evidence. Manual
 operations remain immediately available through the normal safety checks.
 
+An executed attempt that fails arms the cooldown like a successful one, with
+one exception for a service left down by its own remediation. When an automatic
+`start` or `restart` ends in `orphan_processes`, the engine refused to start
+beside processes that outlived the stop (see
+[safety.md](safety.md#rate-limiting)). Its event ends with "start follows once
+these processes exit", and the worker owes the service that start:
+
+- once a cycle proves every listed process generation exited, it runs one
+  `start` inside the cooldown and backoff, still counted against
+  `max_actions` and through the same guards, locks, preflight and
+  reconciliation;
+- that cycle runs no other remediation, as after any operation;
+- a dry-run rule records `would start`, and panic mode or `max_actions`
+  record it as `suppressed`;
+- `unmonitor`, a manual `stop` or any other operation drops it, and a
+  configuration reload keeps it under the reloaded rule (a removed rule, or one
+  that no longer starts or restarts, drops it); it lives in memory, so a
+  `sermod` restart drops it too;
+- a refused or failed owed start, or one that itself ends in
+  `orphan_processes`, leaves the service to its rules and the cooldown that
+  attempt armed.
+
 `backoff` grows the effective cooldown after each consecutive remediation:
 `initial` the first time, then multiplied by `factor` each subsequent time,
 capped at `max`, including when `factor` is very large. `factor` must be a finite

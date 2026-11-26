@@ -67,8 +67,8 @@ func (p Policy) Report(state *RemediationState, now time.Time) RemediationReport
 	switch {
 	case !until.IsZero():
 		reason = "cooldown"
-	case p.MaxActions > 0 && recentActions >= p.MaxActions:
-		reason = "rate limit"
+	case p.rateLimited(recentActions):
+		reason = reasonRateLimit
 	}
 	next := maxTime(until, rateUntil)
 	if reason == "" {
@@ -156,6 +156,25 @@ func maxTime(a, b time.Time) time.Time {
 func (p Policy) Allow(state *RemediationState, now time.Time) (bool, string) {
 	report := p.Report(state, now)
 	return report.Allowed, report.Reason
+}
+
+// AllowWithinCooldown decides whether the start owed to a service its own
+// operation left stopped may run now. The cooldown and backoff exist to space
+// disruptive actions, and that start disrupts nothing: the service is already
+// down. max_actions stays the hard cap on automatic actions.
+func (p Policy) AllowWithinCooldown(state *RemediationState, now time.Time) (bool, string) {
+	if p.rateLimited(p.Report(state, now).RecentActions) {
+		return false, reasonRateLimit
+	}
+	return true, ""
+}
+
+// reasonRateLimit is the suppression reason once max_actions is reached.
+const reasonRateLimit = "rate limit"
+
+// rateLimited reports whether recent automatic actions reached max_actions.
+func (p Policy) rateLimited(recent int) bool {
+	return p.MaxActions > 0 && recent >= p.MaxActions
 }
 
 // Record updates the state after an executed automatic remediation: stamps the

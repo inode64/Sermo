@@ -95,7 +95,7 @@ func TestMaintenanceOutcomeNotifications(t *testing.T) {
 			w := h.worker(nil, rules.Policy{Cooldown: time.Minute}, nil)
 			w.MetricChecks = map[string]any{"trigger": map[string]any{"type": tc.checkType}}
 			firing := firingRule{Name: "reconcile", If: tc.condition, severity: severity.Error}
-			w.executeRemediation(t.Context(), w.Now, firing, "reload", nil)
+			w.executeRemediation(t.Context(), w.Now, firing, "reload", nil, true)
 			if len(h.events) != 1 {
 				t.Fatalf("events = %+v, want one operation outcome", h.events)
 			}

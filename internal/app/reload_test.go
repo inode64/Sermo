@@ -28,6 +28,7 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 		}(),
 		libBaseline:   testArtifactBaseline(map[string]string{"/etc/app.conf": "1:2"}),
 		checkEpisodes: map[string]checkEpisode{"service": {held: severity.Critical}},
+		owedStart:     &owedStart{residuals: orphanedRestart().Processes},
 	}
 	saved := captureWorkerState([]*Worker{old})
 
@@ -48,6 +49,9 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 	}
 	if fresh.checkEpisodes["service"].held != severity.Critical {
 		t.Fatalf("check health state = %+v, want service failing at critical", fresh.checkEpisodes)
+	}
+	if fresh.owedStart == nil || len(fresh.owedStart.residuals) != 2 {
+		t.Fatalf("owed start = %+v, want it carried across the reload", fresh.owedStart)
 	}
 	delete(fresh.checkEpisodes, "service")
 	if old.checkEpisodes["service"].held != severity.Critical {

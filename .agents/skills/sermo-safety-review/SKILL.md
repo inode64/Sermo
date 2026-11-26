@@ -93,6 +93,7 @@ unresolvable or (deleted) exe never matches a non-delegated selector
 residual not matching kill_only_if nor the unit cgroup is never signalled and yields orphan_processes
 unit-cgroup residual: SIGTERM without force_kill, SIGKILL with force_kill true or auto, never false; cgroup revalidated at delivery
 replaced-binary children the stop attributed, still in the unit cgroup: stop policy applies however many survive; untracked, late or moved ones stay refused
+owed start after orphan_processes: only once every listed generation has exited, a single attempt, max_actions holds, a pause or operation drops it
 keep_children keeps non-principals; a reparented daemon instance stays principal; the backend's first PID alone is not a principal
 delegated selector: observed, never signalled, never a residual or stray
 residual sudo close: refused on any missing or changed evidence; TERM, then KILL after term_timeout

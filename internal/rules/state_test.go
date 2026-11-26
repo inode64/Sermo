@@ -397,3 +397,24 @@ func TestRecoverAfterCooldownNeverShortensTheCooldownInForce(t *testing.T) {
 		t.Fatalf("effective cooldown = %s, want the configured one", got)
 	}
 }
+
+// The start owed to a service its own operation left stopped ignores the
+// cooldown and backoff, but max_actions stays the hard cap.
+func TestPolicyAllowWithinCooldown(t *testing.T) {
+	p := Policy{Cooldown: time.Hour, MaxActions: 2, MaxActionsWindow: time.Hour, Backoff: &Backoff{Initial: time.Hour, Factor: 2, Max: 4 * time.Hour}}
+	st := recordActions(time.Hour, t0)
+	st.CurrentBackoff = 2 * time.Hour
+	if ok, _ := p.Allow(st, t0.Add(time.Minute)); ok {
+		t.Fatal("Allow inside the cooldown, want suppressed")
+	}
+	if ok, reason := p.AllowWithinCooldown(st, t0.Add(time.Minute)); !ok || reason != "" {
+		t.Fatalf("AllowWithinCooldown = %v, %q; want allowed inside the cooldown", ok, reason)
+	}
+	st = recordActions(time.Hour, t0, t0.Add(time.Minute))
+	if ok, reason := p.AllowWithinCooldown(st, t0.Add(2*time.Minute)); ok || reason != "rate limit" {
+		t.Fatalf("AllowWithinCooldown at max_actions = %v, %q; want suppressed/rate limit", ok, reason)
+	}
+	if ok, _ := p.AllowWithinCooldown(nil, t0); !ok {
+		t.Fatal("AllowWithinCooldown(nil) should allow")
+	}
+}
