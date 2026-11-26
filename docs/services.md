@@ -1420,7 +1420,10 @@ to stop gracefully and another 60 seconds after SIGTERM before escalation.
   process. The `pm2` profile matches the title the daemon gives itself; the
   `patroni` profile reads the interpreter from its launcher's `#!` line with a
   [`from_file`](#variables-read-from-a-config-file-from_file) variable and
-  requires the launcher as an argument.
+  requires the launcher as an argument. If a package update retargets a symlink
+  to a versioned executable or its containing runtime directory, Sermo verifies
+  the new exact target without requiring a configuration reload. A matching
+  basename alone never establishes identity.
 - `cmd` — a Go RE2 regex matched against the process **cmdline** (argv joined).
   Use it for shared binaries (`java .*unifi`, `openvpn .*tun1\.conf`) when one
   executable serves several instances. The cmdline is spoofable, so `cmd` never

@@ -54,7 +54,9 @@
    that is a link to a versioned file, the previous path also covers the
    deleted previous version beside it (`internal/process/versioned_exe.go`).
    That naming evidence adds no signal authority (`kill_only_if` stays exact),
-   and a live match re-reads the link instead of guessing.
+   and a live match re-reads the link instead of guessing. A live executable
+   below a replaced directory link (a JVM's `bin/java`) also requires that
+   current exact resolution; it does not extend deleted-executable naming.
 9. Incomplete rediscovery stops signal escalation. Keep stop-command,
    auxiliary-stop and artifact warnings in the one audit result even if a
    subsequent phase fails or times out.

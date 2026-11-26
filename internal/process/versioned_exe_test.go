@@ -3,6 +3,7 @@ package process
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -92,6 +93,53 @@ func TestVersionedLinkFollowsAnUpgrade(t *testing.T) {
 	}
 	if p := out.Principal(); !p.ReplacedExecutable || p.Trusted || p.Unverified() {
 		t.Fatalf("principal = %+v, want replaced and not unverified", p)
+	}
+}
+
+func TestExecutableLinkFollowsDirectoryUpgrade(t *testing.T) {
+	dir := t.TempDir()
+	for _, version := range []string{"v1", "v2", "other"} {
+		bin := filepath.Join(dir, version, "bin")
+		if err := os.MkdirAll(bin, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(bin, "java"), nil, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := filepath.Join(dir, "current")
+	if err := os.Symlink("v1", link); err != nil {
+		t.Fatal(err)
+	}
+	sel := parsedSelector(t, filepath.Join(link, "bin", "java"), "svc")
+	sel.Cmd = `-jar /opt/controller.jar start$`
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("v2", link); err != nil {
+		t.Fatal(err)
+	}
+	d := Discoverer{ResolveUser: fakeUsers(map[string]uint32{"svc": 500})}
+	for _, tc := range []struct {
+		name, version, cmd string
+		uid                uint32
+		want               bool
+	}{
+		{"new link target", "v2", "java -jar /opt/controller.jar start", 500, true},
+		{"same basename elsewhere", "other", "java -jar /opt/controller.jar start", 500, false},
+		{"wrong user", "v2", "java -jar /opt/controller.jar start", 600, false},
+		{"wrong application", "v2", "java -jar /opt/other.jar start", 500, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id := Identity{Exe: canonicalizePath(filepath.Join(dir, tc.version, "bin", "java")), ExeOK: true, UID: tc.uid, Cmdline: strings.Fields(tc.cmd)}
+			if got := d.matches(&sel, id, d.resolveUser()); got != tc.want {
+				t.Fatalf("matches=%v, want %v", got, tc.want)
+			}
+			id.ExePrev, id.Exe, id.ExeOK = id.Exe, "", false
+			if d.matches(&sel, id, d.resolveUser()) {
+				t.Fatal("a deleted executable must not establish a live identity")
+			}
+		})
 	}
 }
 

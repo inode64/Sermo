@@ -17,14 +17,21 @@ import (
 
 // selectorNamesExe reports whether exe is the executable the selector names
 // now. The resolution cached when the configuration was loaded is exact; when
-// it no longer matches, a versioned sibling counts only if the link resolves to
-// it when read again, which is what a configuration reload would cache.
+// it no longer matches, a versioned sibling or the same executable below a
+// replaced directory link counts only if the link resolves to it when read
+// again, which is what a configuration reload would cache.
 func selectorNamesExe(sel *Selector, exe string) bool {
 	resolved := selectorExePath(sel)
 	if exe == resolved {
 		return true
 	}
-	return versionedSibling(sel, resolved, exe) && canonicalizePath(sel.Exe) == exe
+	if resolved == filepath.Clean(sel.Exe) {
+		return false
+	}
+	// JVM packages can replace a directory in the path while keeping bin/java.
+	// The basename only bounds link reads; the current exact target is required.
+	possibleTarget := filepath.Base(exe) == filepath.Base(resolved) || versionedSibling(sel, resolved, exe)
+	return possibleTarget && canonicalizePath(sel.Exe) == exe
 }
 
 // selectorNamedReplacedExe reports whether prev, the path of a deleted
